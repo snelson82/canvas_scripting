@@ -43,3 +43,10 @@ env
 node_modules/
 .vscode/settings.json
 needs_testing/**
+
+# SIS Parsing Files
+sis_parsing/skyward_exports/**
+!sis_parsing/skyward_exports/.keep
+sis_parsing/raw_json/**
+!sis_parsing/raw_json/.keep
+sis_parsing/WIP/**
