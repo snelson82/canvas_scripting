@@ -1,8 +1,10 @@
 # WORKING AS OF 06-22-2021
 require 'csv'
 require 'json'
+require 'byebug'
 require 'typhoeus'
 require 'io/console'
+require_relative '../../lib/progressbar'
 
 ### Prompts to set ENV, DOMAIN, TOKEN, and CSV FILE PATH
 
@@ -25,7 +27,7 @@ TOKEN = $stdin.noecho(&:gets).chomp!
 ### CSV FILE ###
 ################
 
-puts 'Enter the full file path for CSV data. EX: /Users/person/file/to/path.csv'
+puts 'Enter the full file path for CSV data. EX: /Users/person/path/to/file.csv'
 MAPPING_FILE = gets.chomp!
 # MAPPING_FILE = ''
 
@@ -47,9 +49,11 @@ API_URL = "https://#{DOMAIN}.#{env}instructure.com/api/v1/".freeze
 API_HEADERS = { authorization: "Bearer #{TOKEN}" }.freeze
 $hydra = Typhoeus::Hydra.new(max_concurrency: 10)
 
-CSV.foreach(MAPPING_FILE, headers: true) do |row|
+CSV.with_progress_bar.foreach(MAPPING_FILE, headers: true) do |row|
+  next if row['email'].nil? || row['user_id'].nil? || row['email'].empty?
+
   request = Typhoeus::Request.new(
-    "#{API_URL}/api_endpoint_goes_here_with_row_value_replacements",
+    "#{API_URL}/users/sis_user_id:#{row['user_id']}",
     method: :put, # Update method appropriate for the API endpoint in use
     headers: API_HEADERS,
     body: {
