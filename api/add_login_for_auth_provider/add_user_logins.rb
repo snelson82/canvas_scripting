@@ -17,7 +17,7 @@ domain = gets.chomp!.downcase
 
 ## TOKEN
 puts 'Enter a valid access token to perform the API calls within this script'
-token = STDIN.noecho(&:gets).chomp!
+token = $stdin.noecho(&:gets).chomp!
 
 ## CSV FILE
 puts 'Enter the full file path for CSV data. EX: /Users/person/file/to/path.csv'
