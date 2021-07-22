@@ -103,14 +103,9 @@ admins_file.close
 
 @f = CSV.open(admin_import_file, 'a+')
 admin_users.each do |admin|
-<<<<<<< HEAD
   @user_id    = "admin_#{admin['_original']['data']['staff_id']}"
   account_ids = admin['_original']['data']['schools']
 
-=======
-  @user_id     = "admin_#{admin['_original']['data']['staff_id']}"
-  account_ids = admin['_original']['data']['schools']
->>>>>>> 961512984dfd77e5285e7ad827b7ef23f590a68a
   account_ids.each do |subaccount|
     @f << [
       @user_id,
