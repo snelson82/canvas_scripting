@@ -1,4 +1,3 @@
-require 'csv'
 require 'date'
 require 'json'
 require 'byebug'
@@ -9,11 +8,14 @@ require 'terminal-table'
 # TODO: Add arrays for users with available login_id mapping and those without
 # TODO: Add terminal output tables to display counts for those with and without login_id values available
 
-puts 'Are we including Admins in this summary? (y/n)'
-$parse_admins = gets.chomp!.downcase
+puts 'Enter full file path for unformatted JSON:'
+file_path = gets.chomp!.gsub("'", '')
+puts "ERROR: File at #{file_path} doesn't exist. Check to ensure the file exists and the full file path is provided" unless File.exist?(file_path)
+exit(1) unless File.exist?(file_path)
 
 # Parse JSON file and set client name for CSV output file names
-op = JSON.parse(File.read(File.expand_path('original.json', 'sis_parsing/raw_json')))
+# op = JSON.parse(File.read(File.expand_path('original.json', 'raw_json')))
+op = JSON.parse(File.read(file_path))
 client_name = ''
 
 ## ORGS / SCHOOLS
@@ -33,18 +35,17 @@ users_file = File.open(File.expand_path("#{client_name}_users.json", 'sis_parsin
 users_file.write(JSON.pretty_generate(users))
 users_file.close
 
-admin_users               = []
 student_users             = []
 faculty_users             = []
-enr_start_dates           = []
 unknown_role_users        = []
 student_login_issues      = []
 faculty_login_issues      = []
+enr_start_dates           = []
 users_without_enrollments = []
 
 ## email_<role> arrays would be used for login_id mapping checks
 users.each do |usr|
-  case usr['_internal']['role']
+  case usr['_original']['role']
   when 'teacher'
     # If the user's role is "teacher", check their login values and add them to the teachers CSV
     faculty_users << usr
@@ -83,8 +84,6 @@ users.each do |usr|
     end
 
     student_login_issues << usr unless usr_issues[:missing_values].empty?
-  when 'schoolAdmin'
-    admin_users << usr if $parse_admins == 'y'
   else
     unknown_role_users << usr
   end
@@ -97,30 +96,6 @@ students_file.close
 teachers_file = File.open(File.expand_path("#{client_name}_teachers.json", 'sis_parsing/1r_endpoint_csvs'), 'w')
 teachers_file.write(JSON.pretty_generate(faculty_users))
 teachers_file.close
-
-unless $parse_admins == 'n'
-  admins_file = File.open(File.expand_path("#{client_name}_admins.json", 'sis_parsing/1r_endpoint_csvs'), 'w')
-  admin_import_file = File.expand_path("#{client_name}_admin_import.csv", 'sis_parsing/1r_endpoint_csvs')
-  CSV.open(admin_import_file, 'w') { |csv| csv << %w[user_id account_id role status] }
-  admins_file.write(JSON.pretty_generate(admin_users))
-  admins_file.close
-
-  @f = CSV.open(admin_import_file, 'a+')
-  admin_users.each do |admin|
-    @user_id    = "admin_#{admin['_original']['data']['staff_id']}"
-    account_ids = admin['_original']['data']['schools']
-
-    account_ids.each do |subaccount|
-      @f << [
-        @user_id,
-        subaccount,
-        'AccountAdmin',
-        'active'
-      ]
-    end
-  end
-  @f.close
-end
 
 ## CLASSES / SECTIONS
 sections = op['sections']
@@ -145,22 +120,14 @@ faculty_enrollments = []
 
 # ENROLLMENTS
 enrollments.each do |enr|
-  target_section = sections.find { |section| section['section_id'] == enr['section_id'] }
-  next unless target_section['_internal'].has_key?('term')
-
-  enrollment_start_date = target_section['_internal']['term']['data']['start_date']
-  next unless enr['status'] == 'active' && enrollment_start_date
-
-  # next if enr['_original']['beginDate'].nil? || enr['status'] == 'deleted'
-  ## Clever JSON only has user_id, section_id, role, status
-  ## It looks like we'll need to get the date from the section data
+  next if enr['_original']['beginDate'].nil? || enr['status'] == 'deleted'
 
   target_user = users_without_enrollments.find { |x| x[:user_id] == enr['user_id'] }
   next if target_user.nil?
 
   target_user[:enrollment_count] += 1
 
-  enr_start_dates     << enrollment_start_date
+  enr_start_dates     << enr['_original']['beginDate']
   student_enrollments << enr if enr['role'] == 'student' && enr['status'] == 'active'
   faculty_enrollments << enr unless enr['role'] == 'student' && enr['status'] == 'active'
 end
@@ -230,15 +197,18 @@ end
 
 def users_without_enrollment_output(enr_count_arr)
   @rows = []
+  counts = 0
   enr_count_arr.each do |usr|
     next if usr[:enrollment_count].positive?
 
-    @rows << [usr[:name], usr[:user_id], usr[:enrollment_count]]
+    @rows << [usr[:name], usr[:user_id], '']
+    counts += 1
   end
+  @rows << ['', '', counts]
 
   enrollment_count_table = Terminal::Table.new(
     title: 'Users with Enrollment Counts',
-    headings: %w[Name user_id Count],
+    headings: %w[Name user_id Total Count],
     rows: @rows,
     style: {
       border_x: '='.bold.light_blue,
@@ -254,8 +224,3 @@ end
 main_output(student_users, faculty_users, courses, sections, terms, accounts, faculty_enrollments, student_enrollments)
 enrollment_output(updated_date_counts)
 users_without_enrollment_output(users_without_enrollments)
-
-puts 'FACULTY'
-pp faculty_login_issues
-puts "\nSTUDENTS"
-pp student_login_issues
